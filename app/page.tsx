@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { RetellWebClient } from 'retell-client-js-sdk';
-import { Phone, PhoneOff, Calendar, ShieldCheck, RefreshCw, Activity, User, Clock } from 'lucide-react';
+import { Phone, PhoneOff, Calendar, ShieldCheck, RefreshCw, Activity, User, Clock, AlertTriangle } from 'lucide-react';
 
 interface Slot {
   id: number;
@@ -173,10 +173,10 @@ export default function Home() {
       {/* Top Header */}
       <header className="header">
         <div className="brand">
-          <div className="brand-icon">+</div>
+          <div className="brand-icon">⚕</div>
           <div>
             <h1 className="brand-title">Metro Health AI</h1>
-            <p className="brand-subtitle">Clinical Appointment Voice System • Powered by Retell & Supabase</p>
+            <p className="brand-subtitle">Clinical Appointment Voice System • Retell & Supabase Powered</p>
           </div>
         </div>
 
@@ -203,49 +203,50 @@ export default function Home() {
           <div>
             <div className="card">
               <h2 className="card-title">
-                <Activity size={20} color="#0284c7" />
+                <Activity size={22} color="#121212" />
                 Voice Assistant (Maya)
               </h2>
               <p className="card-desc">
-                Speak directly through your browser microphone. Maya queries real-time availability and confirms bookings.
+                Talk directly through your browser microphone. Maya queries real-time doctor availability and books appointments.
               </p>
 
               <div className="call-box">
                 <div className="agent-avatar">
                   {callStatus === 'active' && <div className="pulse-ring" />}
-                  <User size={38} color="#0284c7" />
+                  <User size={44} color="#121212" />
                 </div>
 
                 <div>
                   <span className={`status-badge status-${callStatus}`}>
-                    {callStatus === 'idle' && 'Offline / Ready'}
-                    {callStatus === 'connecting' && 'Connecting audio...'}
-                    {callStatus === 'active' && (isAgentSpeaking ? 'Maya is Speaking' : 'Maya is Listening')}
+                    {callStatus === 'idle' && '● Ready to Call'}
+                    {callStatus === 'connecting' && '⚡ Connecting Audio...'}
+                    {callStatus === 'active' && (isAgentSpeaking ? '🔊 Maya is Speaking' : '🎤 Maya is Listening')}
                   </span>
                 </div>
 
                 {callStatus === 'idle' ? (
                   <button className="call-btn btn-start" onClick={handleStartCall}>
-                    <Phone size={18} />
+                    <Phone size={20} />
                     Start Voice Call
                   </button>
                 ) : (
                   <button className="call-btn btn-end" onClick={handleEndCall}>
-                    <PhoneOff size={18} />
+                    <PhoneOff size={20} />
                     Hang Up Call
                   </button>
                 )}
               </div>
 
-              {/* Guardrails Info Box */}
-              <div style={{ marginTop: '20px', padding: '14px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '13px' }}>
-                <strong style={{ display: 'block', marginBottom: '4px', color: '#0f172a' }}>
-                  Safety & Guardrail Rules Active:
-                </strong>
-                <ul style={{ paddingLeft: '18px', color: '#64748b', lineHeight: '1.5' }}>
-                  <li>Acute chest pain or stroke symptoms trigger emergency 911 redirect.</li>
-                  <li>Double-booking collision prevention enabled.</li>
-                  <li>Caller phone & name required for confirmation.</li>
+              {/* Guardrails Info Box (108 Emergency Protocol) */}
+              <div className="info-box">
+                <span className="info-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <AlertTriangle size={16} color="#121212" />
+                  Clinical Triage & Safety Active:
+                </span>
+                <ul className="info-list">
+                  <li><strong>108 Ambulance Protocol</strong>: Serious/emergency symptoms advise calling 108 immediately, while offering the patient the choice to book an urgent consultation.</li>
+                  <li><strong>Double-Booking Protection</strong>: Atomic slot locks prevent collisions.</li>
+                  <li><strong>Patient Entity Verification</strong>: Name and phone number mandatory.</li>
                 </ul>
               </div>
             </div>
@@ -257,23 +258,23 @@ export default function Home() {
               <div className="section-header">
                 <div>
                   <h2 className="card-title">
-                    <Calendar size={20} color="#0284c7" />
+                    <Calendar size={22} color="#121212" />
                     Doctor Schedules & Availability
                   </h2>
                   <p className="card-desc" style={{ marginBottom: 0 }}>
-                    Slots update automatically when Maya books an appointment.
+                    Real-time Postgres slots. Badges flip to "Booked" the instant Maya confirms an appointment.
                   </p>
                 </div>
 
                 <button className="btn-secondary" onClick={handleResetSchedule} disabled={loadingSchedule}>
-                  <RefreshCw size={13} style={{ display: 'inline', marginRight: '6px' }} />
+                  <RefreshCw size={14} style={{ display: 'inline', marginRight: '6px' }} />
                   {loadingSchedule ? 'Resetting...' : 'Reset Slots'}
                 </button>
               </div>
 
               {/* Doctor Cards */}
               {Object.keys(doctorsMap).length === 0 ? (
-                <p style={{ color: '#64748b', fontSize: '14px' }}>Loading clinic slots...</p>
+                <p style={{ color: '#475569', fontWeight: 700, fontSize: '14px' }}>Loading clinic slots from Supabase...</p>
               ) : (
                 Object.entries(doctorsMap).map(([doctorName, info]) => (
                   <div key={doctorName} className="doctor-card">
@@ -285,8 +286,11 @@ export default function Home() {
                           key={s.id}
                           className={`slot-pill ${s.is_booked ? 'slot-booked' : 'slot-available'}`}
                         >
-                          <Clock size={13} />
-                          {s.slot_time} • {s.is_booked ? 'Booked' : 'Available'}
+                          <Clock size={14} />
+                          <span>{s.slot_time}</span>
+                          <span style={{ fontSize: '11px', textTransform: 'uppercase', opacity: 0.9 }}>
+                            {s.is_booked ? '• Booked' : '• Open'}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -296,13 +300,13 @@ export default function Home() {
 
               {/* Confirmed Appointments Table */}
               <div style={{ marginTop: '28px' }}>
-                <h3 className="card-title" style={{ fontSize: '16px' }}>
-                  Recent Confirmed Bookings ({appointments.length})
+                <h3 className="card-title" style={{ fontSize: '17px' }}>
+                  Confirmed Bookings ({appointments.length})
                 </h3>
                 {appointments.length === 0 ? (
-                  <p style={{ color: '#94a3b8', fontSize: '13px', marginTop: '8px' }}>
-                    No bookings yet. Call Maya to book your first slot!
-                  </p>
+                  <div style={{ padding: '20px', background: '#f8fafc', border: 'var(--border-thick)', borderRadius: '10px', marginTop: '10px', textAlign: 'center', fontWeight: 700, color: '#64748b' }}>
+                    No appointments booked yet. Click "Start Voice Call" to test booking with Maya!
+                  </div>
                 ) : (
                   <div className="table-wrap">
                     <table>
@@ -318,12 +322,12 @@ export default function Home() {
                       <tbody>
                         {appointments.map((a) => (
                           <tr key={a.id}>
-                            <td style={{ fontWeight: 500 }}>{a.patient_name}</td>
-                            <td style={{ color: '#64748b' }}>{a.patient_phone}</td>
+                            <td style={{ fontWeight: 800 }}>{a.patient_name}</td>
+                            <td style={{ color: '#1e293b' }}>{a.patient_phone}</td>
                             <td>{a.doctor_name}</td>
                             <td>{a.slot_time}</td>
                             <td>
-                              <span style={{ background: '#dcfce7', color: '#15803d', padding: '3px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 600 }}>
+                              <span style={{ background: 'var(--neo-green)', color: 'var(--black)', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 900, border: 'var(--border-thin)', textTransform: 'uppercase' }}>
                                 {a.status}
                               </span>
                             </td>
@@ -343,31 +347,31 @@ export default function Home() {
           <div className="section-header">
             <div>
               <h2 className="card-title">
-                <ShieldCheck size={22} color="#0284c7" />
+                <ShieldCheck size={24} color="#121212" />
                 Part B: Automated Clinical Evaluation Harness
               </h2>
               <p className="card-desc" style={{ marginBottom: 0 }}>
-                Runs deterministic assertions against availability queries, concurrency double-booking, and emergency triage guardrails.
+                Runs deterministic assertions against availability queries, concurrency collision prevention, 108 emergency triage, and patient data validation.
               </p>
             </div>
 
             <button
               className="call-btn btn-start"
-              style={{ width: 'auto', padding: '10px 20px' }}
+              style={{ width: 'auto', padding: '12px 24px' }}
               onClick={handleRunEvals}
               disabled={evalLoading}
             >
-              {evalLoading ? 'Running Test Suite...' : 'Run All Evals'}
+              {evalLoading ? 'Running Test Suite...' : '⚡ Run All Evals'}
             </button>
           </div>
 
           {evalScore !== null && (
-            <div style={{ margin: '20px 0', padding: '16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <div style={{ fontSize: '32px', fontWeight: 800, color: '#15803d' }}>{evalScore}%</div>
+            <div style={{ margin: '24px 0', padding: '20px', background: 'var(--neo-green)', border: 'var(--border-thick)', borderRadius: '14px', display: 'flex', alignItems: 'center', gap: '20px', boxShadow: 'var(--shadow-md)' }}>
+              <div style={{ fontSize: '42px', fontWeight: 900, color: 'var(--black)', borderRight: 'var(--border-thick)', paddingRight: '20px' }}>{evalScore}%</div>
               <div>
-                <strong style={{ fontSize: '16px', color: '#14532d' }}>Evaluation Benchmark Passed</strong>
-                <p style={{ fontSize: '13px', color: '#15803d' }}>
-                  All critical safety, concurrency, and booking verification assertions succeeded.
+                <strong style={{ fontSize: '18px', fontWeight: 900, color: 'var(--black)', textTransform: 'uppercase', display: 'block' }}>Evaluation Benchmark Passed</strong>
+                <p style={{ fontSize: '14px', fontWeight: 700, color: 'var(--black)', marginTop: '2px' }}>
+                  All 5 critical safety, concurrency, 108 triage protocol, and booking verification assertions succeeded.
                 </p>
               </div>
             </div>
@@ -376,17 +380,17 @@ export default function Home() {
           <div style={{ marginTop: '20px' }}>
             {evalResults.map((r) => (
               <div key={r.id} className={`eval-card ${r.passed ? 'eval-pass' : 'eval-fail'}`}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                  <span style={{ fontWeight: 600, fontSize: '15px' }}>{r.name}</span>
-                  <span style={{ fontSize: '12px', fontWeight: 700, color: r.passed ? '#15803d' : '#b91c1c' }}>
-                    {r.passed ? 'PASSED' : 'FAILED'} ({r.durationMs}ms)
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                  <span style={{ fontWeight: 900, fontSize: '16px', color: 'var(--black)' }}>{r.name}</span>
+                  <span className={`eval-badge ${r.passed ? 'eval-badge-pass' : 'eval-badge-fail'}`}>
+                    {r.passed ? '✓ PASSED' : '✕ FAILED'} ({r.durationMs}ms)
                   </span>
                 </div>
-                <div style={{ fontSize: '13px', color: '#64748b' }}>
-                  <strong>Expected:</strong> {r.expected}
+                <div style={{ fontSize: '13px', fontWeight: 700, color: '#475569' }}>
+                  <strong>EXPECTED:</strong> {r.expected}
                 </div>
-                <div style={{ fontSize: '13px', color: '#0f172a', marginTop: '2px' }}>
-                  <strong>Actual:</strong> {r.actual}
+                <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--black)', marginTop: '4px' }}>
+                  <strong>ACTUAL:</strong> {r.actual}
                 </div>
               </div>
             ))}

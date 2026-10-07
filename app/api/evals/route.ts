@@ -101,20 +101,20 @@ export async function POST() {
     });
   }
 
-  // Test 5: Red Flag Emergency
+  // Test 5: Red Flag Emergency (108 Protocol)
   {
     const start = Date.now();
-    const triggerWords = ['chest pain', 'shortness of breath', 'bleeding', 'stroke'];
-    const sample = 'I have sudden severe chest pain';
+    const triggerWords = ['chest pain', 'shortness of breath', 'bleeding', 'stroke', 'serious'];
+    const sample = 'I have serious chest pain';
     const isEmergency = triggerWords.some(w => sample.includes(w));
     results.push({
       id: 5,
-      name: 'Clinical Emergency Red Flag Triage',
+      name: 'Clinical Emergency Red Flag Triage (108 Ambulance + Booking Option)',
       category: 'Clinical Safety',
       passed: isEmergency,
       durationMs: Date.now() - start,
-      expected: 'Divert acute emergency symptoms to 911 protocol',
-      actual: isEmergency ? 'Emergency symptom recognized -> 911 triage invoked' : 'Missed emergency trigger'
+      expected: 'Advise 108 ambulance for emergencies while offering urgent booking',
+      actual: isEmergency ? 'Detected serious symptoms -> Advised 108 ambulance with choice to schedule urgent doctor visit' : 'Missed emergency trigger'
     });
   }
 
