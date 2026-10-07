@@ -1,0 +1,29 @@
+{
+  "name": "clinic-appointment-voice-agent",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "evals": "npx tsx scripts/run-evals.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
+    "lucide-react": "^0.475.0",
+    "next": "^14.2.23",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "retell-client-js-sdk": "^2.0.7",
+    "retell-sdk": "^3.0.0",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.19",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@types/ws": "^8.18.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}
