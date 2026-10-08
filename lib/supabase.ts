@@ -1,5 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 
+// Polyfill WebSocket in Node.js environments if not present
+if (typeof globalThis.WebSocket === 'undefined' && typeof window === 'undefined') {
+  try {
+    const ws = require('ws');
+    (globalThis as any).WebSocket = ws;
+  } catch (err) {
+    // ws may not be installed in all contexts
+  }
+}
+
 // Read the URL and public Anon key from environment variables with safe defaults
 const supabaseUrl =
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -11,3 +21,4 @@ const supabaseAnonKey =
 
 // Initialize and export a single Supabase client instance
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+

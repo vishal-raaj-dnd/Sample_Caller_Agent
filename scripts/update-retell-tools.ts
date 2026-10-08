@@ -20,7 +20,7 @@ If the caller mentions serious symptoms or emergencies (such as acute chest pain
 SCHEDULING WORKFLOW:
 2. NEVER GUESS AVAILABILITY: Always call check_availability to retrieve real-time slots from the database before suggesting any time.
 3. CONVERSATION STEPS:
-   - Ask which specialty or doctor they need (General Practice, Cardiology, or Dermatology).
+   - Ask which specialty or doctor they need (Cardiology, General Practice, Dermatology, Pediatrics, Orthopedics, or Neurology).
    - Ask for their preferred day and time of day (morning or afternoon).
    - Call check_availability to fetch slots.
    - Present 2 or 3 matching open options clearly.
@@ -42,7 +42,7 @@ SCHEDULING WORKFLOW:
           properties: {
             specialty: {
               type: 'string',
-              description: 'Cardiology, Dermatology, or General Practice'
+              description: 'Cardiology, Dermatology, General Practice, Pediatrics, Orthopedics, or Neurology'
             },
             time_of_day: {
               type: 'string',

@@ -2,7 +2,24 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { RetellWebClient } from 'retell-client-js-sdk';
-import { Phone, PhoneOff, Calendar, ShieldCheck, RefreshCw, Activity, User, Clock, AlertTriangle } from 'lucide-react';
+import {
+  Phone,
+  PhoneOff,
+  Calendar,
+  ShieldCheck,
+  RefreshCw,
+  Activity,
+  User,
+  Clock,
+  AlertTriangle,
+  Search,
+  Plus,
+  X,
+  Check,
+  Volume2,
+  Stethoscope,
+  Trash2
+} from 'lucide-react';
 
 interface Slot {
   id: number;
@@ -42,6 +59,20 @@ export default function Home() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loadingSchedule, setLoadingSchedule] = useState(false);
 
+  // Filter & Search state
+  const [selectedSpecialty, setSelectedSpecialty] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Manual Booking Modal state
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+  const [bookingDoctor, setBookingDoctor] = useState('');
+  const [bookingTime, setBookingTime] = useState('');
+  const [patientName, setPatientName] = useState('');
+  const [patientPhone, setPatientPhone] = useState('');
+  const [bookingReason, setBookingReason] = useState('General Consultation');
+  const [bookingSubmitting, setBookingSubmitting] = useState(false);
+  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
   // Evals state
   const [evalLoading, setEvalLoading] = useState(false);
   const [evalScore, setEvalScore] = useState<number | null>(null);
@@ -49,7 +80,7 @@ export default function Home() {
 
   const retellClientRef = useRef<RetellWebClient | null>(null);
 
-  // Fetch slots and appointments
+  // Load schedule from Supabase
   const loadSchedule = async () => {
     try {
       const res = await fetch('/api/slots');
@@ -65,7 +96,7 @@ export default function Home() {
 
   useEffect(() => {
     loadSchedule();
-    const interval = setInterval(loadSchedule, 4000);
+    const interval = setInterval(loadSchedule, 3000);
     return () => clearInterval(interval);
   }, []);
 
@@ -75,9 +106,19 @@ export default function Home() {
     try {
       await fetch('/api/slots', { method: 'POST' });
       await loadSchedule();
+      showToast('Schedule reset to 23 multi-specialty clinical slots', 'success');
+    } catch (e) {
+      showToast('Failed to reset schedule', 'error');
     } finally {
       setLoadingSchedule(false);
     }
+  };
+
+  const showToast = (text: string, type: 'success' | 'error') => {
+    setToastMessage({ text, type });
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 4500);
   };
 
   // Start Voice Call
@@ -85,22 +126,21 @@ export default function Home() {
     try {
       setCallStatus('connecting');
 
-      // 1. Get web call access token from our secure server route
       const res = await fetch('/api/create-web-call', { method: 'POST' });
       const data = await res.json();
 
       if (!res.ok || !data.access_token) {
-        alert('Could not start call: ' + (data.error || 'Server error'));
+        showToast('Could not start call: ' + (data.error || 'Server error'), 'error');
         setCallStatus('idle');
         return;
       }
 
-      // 2. Initialize Retell Web Client
       const client = new RetellWebClient();
       retellClientRef.current = client;
 
       client.on('call_started', () => {
         setCallStatus('active');
+        showToast('Voice channel connected. Start speaking with Maya!', 'success');
       });
 
       client.on('call_ended', () => {
@@ -122,14 +162,13 @@ export default function Home() {
         setCallStatus('idle');
       });
 
-      // 3. Connect audio stream
       await client.startCall({
         accessToken: data.access_token,
       });
 
     } catch (err: any) {
       console.error('Failed to start call:', err);
-      alert('Error initializing microphone or call session.');
+      showToast('Microphone access or audio device initialization failed.', 'error');
       setCallStatus('idle');
     }
   };
@@ -140,6 +179,92 @@ export default function Home() {
       retellClientRef.current.stopCall();
       setCallStatus('idle');
       setIsAgentSpeaking(false);
+      showToast('Voice call ended.', 'success');
+    }
+  };
+
+  // Open booking modal for specific slot
+  const handleOpenBookingModalForSlot = (slot: Slot) => {
+    if (slot.is_booked) return;
+    setBookingDoctor(slot.doctor_name);
+    setBookingTime(slot.slot_time);
+    setIsBookingModalOpen(true);
+  };
+
+  // Open empty booking modal
+  const handleOpenNewBooking = () => {
+    const firstAvailable = slots.find(s => !s.is_booked);
+    if (firstAvailable) {
+      setBookingDoctor(firstAvailable.doctor_name);
+      setBookingTime(firstAvailable.slot_time);
+    }
+    setIsBookingModalOpen(true);
+  };
+
+  // Submit manual booking
+  const handleConfirmBooking = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!patientName.trim() || !patientPhone.trim()) {
+      showToast('Please enter both patient name and phone number', 'error');
+      return;
+    }
+
+    setBookingSubmitting(true);
+    try {
+      const res = await fetch('/api/tools/book-appointment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          doctor_name: bookingDoctor,
+          slot_time: bookingTime,
+          patient_name: patientName,
+          patient_phone: patientPhone,
+          reason: bookingReason
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        showToast(data.message || 'Could not complete booking', 'error');
+      } else {
+        showToast(data.message || 'Appointment confirmed successfully!', 'success');
+        setIsBookingModalOpen(false);
+        setPatientName('');
+        setPatientPhone('');
+        await loadSchedule();
+      }
+    } catch (err: any) {
+      showToast('Network error while booking: ' + err.message, 'error');
+    } finally {
+      setBookingSubmitting(false);
+    }
+  };
+
+  // Cancel / Free appointment
+  const handleCancelAppointment = async (appt: Appointment) => {
+    if (!confirm(`Cancel appointment for ${appt.patient_name} with ${appt.doctor_name} at ${appt.slot_time}?`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/appointments/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          appointment_id: appt.id,
+          doctor_name: appt.doctor_name,
+          slot_time: appt.slot_time
+        })
+      });
+
+      if (res.ok) {
+        showToast('Appointment cancelled and slot restored to available!', 'success');
+        await loadSchedule();
+      } else {
+        showToast('Failed to cancel appointment', 'error');
+      }
+    } catch (e) {
+      showToast('Error cancelling appointment', 'error');
     }
   };
 
@@ -152,184 +277,347 @@ export default function Home() {
       setEvalScore(data.score);
       setEvalResults(data.results || []);
       await loadSchedule();
+      showToast(`Evaluation completed! Score: ${data.score}%`, 'success');
     } catch (err) {
       console.error('Eval error:', err);
+      showToast('Eval execution failed', 'error');
     } finally {
       setEvalLoading(false);
     }
   };
 
-  // Group slots by doctor
+  // Specialties list
+  const specialties = ['ALL', 'Cardiology', 'General Practice', 'Dermatology', 'Pediatrics', 'Orthopedics', 'Neurology'];
+
+  // Filter slots
+  const filteredSlots = slots.filter(s => {
+    const matchesSpec = selectedSpecialty === 'ALL' || s.specialty.toLowerCase() === selectedSpecialty.toLowerCase();
+    const matchesSearch = !searchQuery ||
+      s.doctor_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.specialty.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.slot_time.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesSpec && matchesSearch;
+  });
+
+  // Group filtered slots by doctor
   const doctorsMap: { [key: string]: { specialty: string; slots: Slot[] } } = {};
-  slots.forEach((s) => {
+  filteredSlots.forEach((s) => {
     if (!doctorsMap[s.doctor_name]) {
       doctorsMap[s.doctor_name] = { specialty: s.specialty, slots: [] };
     }
     doctorsMap[s.doctor_name].slots.push(s);
   });
 
+  // Available slots for currently selected doctor in booking modal
+  const availableSlotsForSelectedDoctor = slots.filter(
+    s => s.doctor_name === bookingDoctor && !s.is_booked
+  );
+
   return (
     <div className="container">
-      {/* Top Header */}
+      {/* Neo-Brutalist Spec Banner */}
+      <div className="spec-banner">
+        <span>NEO-BRUTALIST DESIGN SYSTEM • BOLD. LOUD. SYSTEMATIC. USABLE.</span>
+        <div className="spec-banner-tags">
+          <span className="spec-chip chip-teal">#00C2CB TEAL</span>
+          <span className="spec-chip chip-magenta">#FF00FF MAGENTA</span>
+          <span className="spec-chip chip-yellow">#FFE000 YELLOW</span>
+          <span className="spec-chip">0-4-12 ELEVATION</span>
+        </div>
+      </div>
+
+      {/* Main Header */}
       <header className="header">
         <div className="brand">
-          <div className="brand-icon">⚕</div>
+          <div className="brand-icon">
+            <Stethoscope size={30} strokeWidth={2.5} />
+          </div>
           <div>
-            <h1 className="brand-title">Metro Health AI</h1>
-            <p className="brand-subtitle">Clinical Appointment Voice System • Retell & Supabase Powered</p>
+            <h1 className="brand-title">Metro Health Clinic</h1>
+            <p className="brand-subtitle">AI-Native Clinical Appointment System • Retell & Cloud Postgres</p>
           </div>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="tabs">
-          <button
-            className={`tab-btn ${activeTab === 'agent' ? 'active' : ''}`}
-            onClick={() => setActiveTab('agent')}
-          >
-            Live Agent & Schedule
+        <div className="header-actions">
+          <button className="btn btn-primary-teal" onClick={handleOpenNewBooking}>
+            <Plus size={18} strokeWidth={3} />
+            Book Appointment
           </button>
-          <button
-            className={`tab-btn ${activeTab === 'evals' ? 'active' : ''}`}
-            onClick={() => setActiveTab('evals')}
-          >
-            Eval Suite (Part B)
-          </button>
+
+          <div className="tabs">
+            <button
+              className={`tab-btn ${activeTab === 'agent' ? 'active' : ''}`}
+              onClick={() => setActiveTab('agent')}
+            >
+              Live Agent & Schedule
+            </button>
+            <button
+              className={`tab-btn ${activeTab === 'evals' ? 'active' : ''}`}
+              onClick={() => setActiveTab('evals')}
+            >
+              Eval Harness (Part B)
+            </button>
+          </div>
         </div>
       </header>
 
+      {/* Toast Alert Banner */}
+      {toastMessage && (
+        <div
+          className={`brutal-banner ${toastMessage.type === 'success' ? 'banner-warning' : 'banner-danger'}`}
+          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 900 }}>
+            {toastMessage.type === 'success' ? <Check size={20} strokeWidth={3} /> : <AlertTriangle size={20} strokeWidth={3} />}
+            <span>{toastMessage.text}</span>
+          </div>
+          <button
+            onClick={() => setToastMessage(null)}
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontWeight: 900 }}
+          >
+            <X size={18} />
+          </button>
+        </div>
+      )}
+
       {activeTab === 'agent' ? (
-        <div className="grid-2">
-          {/* Left Column: Voice Agent Controller */}
+        <div className="grid-main">
+          {/* LEFT COLUMN: Voice Agent Telecom Terminal */}
           <div>
             <div className="card">
-              <h2 className="card-title">
-                <Activity size={22} color="#121212" />
-                Voice Assistant (Maya)
-              </h2>
+              <div className="card-header-bar">
+                <span className="card-header-title">
+                  <Activity size={18} strokeWidth={3} />
+                  Telecom Terminal: Maya
+                </span>
+                <span className="badge-specialty" style={{ background: varCss('--accent-yellow') }}>
+                  Web-Call Live
+                </span>
+              </div>
+
               <p className="card-desc">
-                Talk directly through your browser microphone. Maya queries real-time doctor availability and books appointments.
+                Full bi-directional voice scheduling assistant connected directly to Postgres doctor availability.
               </p>
 
-              <div className="call-box">
-                <div className="agent-avatar">
-                  {callStatus === 'active' && <div className="pulse-ring" />}
-                  <User size={44} color="#121212" />
+              {/* Hardware Console Box */}
+              <div className={`telecom-console ${isAgentSpeaking ? 'active-speaking' : ''}`}>
+                <div className="telecom-topbar">
+                  <span>Channel: Audio-Full-Duplex</span>
+                  <span>Engine: Retell GPT-5.6-Terra</span>
+                </div>
+
+                <div className="telecom-meter-box">
+                  <div className={`terminal-avatar-square ${isAgentSpeaking ? 'active-speaking' : ''}`}>
+                    <User size={38} strokeWidth={2.5} color="#000" />
+                  </div>
+
+                  <div className="audio-frequency-bars">
+                    <div className="frequency-bar" />
+                    <div className="frequency-bar" />
+                    <div className="frequency-bar" />
+                    <div className="frequency-bar" />
+                    <div className="frequency-bar" />
+                    <div className="frequency-bar" />
+                    <div className="frequency-bar" />
+                    <div className="frequency-bar" />
+                  </div>
                 </div>
 
                 <div>
-                  <span className={`status-badge status-${callStatus}`}>
-                    {callStatus === 'idle' && '● Ready to Call'}
-                    {callStatus === 'connecting' && '⚡ Connecting Audio...'}
-                    {callStatus === 'active' && (isAgentSpeaking ? '🔊 Maya is Speaking' : '🎤 Maya is Listening')}
+                  <span className={`brutal-status-tag ${
+                    callStatus === 'idle' ? 'status-tag-idle' :
+                    callStatus === 'connecting' ? 'status-tag-connecting' : 'status-tag-active'
+                  }`}>
+                    {callStatus === 'idle' && '● STANDBY • READY TO CALL'}
+                    {callStatus === 'connecting' && '⚡ CONNECTING AUDIO CHANNEL...'}
+                    {callStatus === 'active' && (isAgentSpeaking ? '🔊 MAYA IS SPEAKING' : '🎤 MAYA IS LISTENING')}
                   </span>
                 </div>
 
                 {callStatus === 'idle' ? (
-                  <button className="call-btn btn-start" onClick={handleStartCall}>
-                    <Phone size={20} />
+                  <button className="btn btn-primary-teal btn-full" onClick={handleStartCall}>
+                    <Phone size={18} strokeWidth={3} />
                     Start Voice Call
                   </button>
                 ) : (
-                  <button className="call-btn btn-end" onClick={handleEndCall}>
-                    <PhoneOff size={20} />
+                  <button className="btn btn-danger btn-full" onClick={handleEndCall}>
+                    <PhoneOff size={18} strokeWidth={3} />
                     Hang Up Call
                   </button>
                 )}
               </div>
 
-              {/* Guardrails Info Box (108 Emergency Protocol) */}
-              <div className="info-box">
-                <span className="info-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <AlertTriangle size={16} color="#121212" />
-                  Clinical Triage & Safety Active:
-                </span>
-                <ul className="info-list">
-                  <li><strong>108 Ambulance Protocol</strong>: Serious/emergency symptoms advise calling 108 immediately, while offering the patient the choice to book an urgent consultation.</li>
-                  <li><strong>Double-Booking Protection</strong>: Atomic slot locks prevent collisions.</li>
-                  <li><strong>Patient Entity Verification</strong>: Name and phone number mandatory.</li>
+              {/* 108 Emergency Protocol Card */}
+              <div className="brutal-banner banner-warning">
+                <div className="banner-title">
+                  <AlertTriangle size={18} strokeWidth={3} />
+                  108 Emergency Triage Protocol:
+                </div>
+                <ul className="banner-list">
+                  <li><strong>108 Ambulance Protocol</strong>: Serious/life-threatening symptoms advise calling 108 immediately, while offering the caller the option to book an urgent clinic visit.</li>
+                  <li><strong>Live Database Check</strong>: Agent calls <code>check_availability</code> before proposing any doctor opening.</li>
+                  <li><strong>Atomic Slot Locking</strong>: Concurrency checks prevent double-booking collisions.</li>
                 </ul>
+              </div>
+
+              {/* Voice Configuration Quick Guide */}
+              <div className="brutal-banner banner-info" style={{ marginTop: '16px' }}>
+                <div className="banner-title">
+                  <Volume2 size={18} strokeWidth={3} />
+                  How to Change Agent Voice:
+                </div>
+                <div style={{ fontSize: '12px', fontWeight: 700, lineHeight: 1.6 }}>
+                  <div>• <strong>Current Voice</strong>: <code>retell-Cimo</code> (Ultra-low latency)</div>
+                  <div>• <strong>Run in terminal</strong>: <code>npx tsx scripts/change-voice.ts 11labs-Adrian</code></div>
+                  <div>• <strong>Or in Dashboard</strong>: Click <em>Voice</em> dropdown in Retell to pick 50+ ElevenLabs/Cartesia voices.</div>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Right Column: Live Doctor Schedule & Appointments */}
+          {/* RIGHT COLUMN: Live Clinic Schedule & Bookings */}
           <div>
             <div className="card">
-              <div className="section-header">
-                <div>
-                  <h2 className="card-title">
-                    <Calendar size={22} color="#121212" />
-                    Doctor Schedules & Availability
-                  </h2>
-                  <p className="card-desc" style={{ marginBottom: 0 }}>
-                    Real-time Postgres slots. Badges flip to "Booked" the instant Maya confirms an appointment.
-                  </p>
-                </div>
-
-                <button className="btn-secondary" onClick={handleResetSchedule} disabled={loadingSchedule}>
-                  <RefreshCw size={14} style={{ display: 'inline', marginRight: '6px' }} />
-                  {loadingSchedule ? 'Resetting...' : 'Reset Slots'}
+              <div className="card-header-bar">
+                <span className="card-header-title">
+                  <Calendar size={18} strokeWidth={3} />
+                  Doctor Availability ({slots.filter(s => !s.is_booked).length} Open / {slots.length} Total)
+                </span>
+                <button
+                  className="btn btn-sm btn-secondary-white"
+                  onClick={handleResetSchedule}
+                  disabled={loadingSchedule}
+                >
+                  <RefreshCw size={13} strokeWidth={3} />
+                  {loadingSchedule ? 'Resetting...' : 'Reset 23 Slots'}
                 </button>
               </div>
 
-              {/* Doctor Cards */}
-              {Object.keys(doctorsMap).length === 0 ? (
-                <p style={{ color: '#475569', fontWeight: 700, fontSize: '14px' }}>Loading clinic slots from Supabase...</p>
-              ) : (
-                Object.entries(doctorsMap).map(([doctorName, info]) => (
-                  <div key={doctorName} className="doctor-card">
-                    <div className="doctor-name">{doctorName}</div>
-                    <div className="doctor-spec">{info.specialty}</div>
-                    <div className="slots-grid">
-                      {info.slots.map((s) => (
-                        <div
-                          key={s.id}
-                          className={`slot-pill ${s.is_booked ? 'slot-booked' : 'slot-available'}`}
-                        >
-                          <Clock size={14} />
-                          <span>{s.slot_time}</span>
-                          <span style={{ fontSize: '11px', textTransform: 'uppercase', opacity: 0.9 }}>
-                            {s.is_booked ? '• Booked' : '• Open'}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))
-              )}
+              {/* Department Filters & Search */}
+              <div className="schedule-controls">
+                <div className="specialty-filter-bar">
+                  {specialties.map(spec => {
+                    const count = spec === 'ALL'
+                      ? slots.length
+                      : slots.filter(s => s.specialty.toLowerCase() === spec.toLowerCase()).length;
+                    return (
+                      <button
+                        key={spec}
+                        className={`filter-chip ${selectedSpecialty === spec ? 'active' : ''}`}
+                        onClick={() => setSelectedSpecialty(spec)}
+                      >
+                        {spec} ({count})
+                      </button>
+                    );
+                  })}
+                </div>
 
-              {/* Confirmed Appointments Table */}
-              <div style={{ marginTop: '28px' }}>
-                <h3 className="card-title" style={{ fontSize: '17px' }}>
-                  Confirmed Bookings ({appointments.length})
-                </h3>
-                {appointments.length === 0 ? (
-                  <div style={{ padding: '20px', background: '#f8fafc', border: 'var(--border-thick)', borderRadius: '10px', marginTop: '10px', textAlign: 'center', fontWeight: 700, color: '#64748b' }}>
-                    No appointments booked yet. Click "Start Voice Call" to test booking with Maya!
+                <div className="search-input-box">
+                  <Search size={16} strokeWidth={3} />
+                  <input
+                    type="text"
+                    placeholder="Search doctor or slot..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Doctor Schedule Cards */}
+              <div className="doctor-grid">
+                {Object.keys(doctorsMap).length === 0 ? (
+                  <div className="brutal-banner banner-info" style={{ textAlign: 'center', padding: '24px' }}>
+                    No doctors found matching "{searchQuery}". Try selecting another department filter above.
                   </div>
                 ) : (
-                  <div className="table-wrap">
-                    <table>
+                  Object.entries(doctorsMap).map(([docName, info]) => (
+                    <div key={docName} className="doctor-item-card">
+                      <div className="doctor-item-header">
+                        <div>
+                          <div className="doctor-title-text">{docName}</div>
+                          <span className="badge-specialty" style={{ marginTop: '4px', display: 'inline-block' }}>
+                            {info.specialty}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#555' }}>
+                          Tomorrow • Clinic Wing B
+                        </span>
+                      </div>
+
+                      <div className="slots-container">
+                        {info.slots.map((s) => (
+                          <button
+                            key={s.id}
+                            className={`slot-block ${s.is_booked ? 'booked' : 'available'}`}
+                            onClick={() => handleOpenBookingModalForSlot(s)}
+                            disabled={s.is_booked}
+                            title={s.is_booked ? 'Already reserved' : 'Click to instantly book this slot'}
+                          >
+                            <Clock size={13} strokeWidth={3} />
+                            <span>{s.slot_time}</span>
+                            <span style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 900 }}>
+                              {s.is_booked ? '✕ RESERVED' : '✓ OPEN'}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Confirmed Appointments Section */}
+              <div style={{ marginTop: '32px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <h3 className="card-title" style={{ fontSize: '17px', margin: 0 }}>
+                    <ShieldCheck size={20} strokeWidth={3} />
+                    Confirmed Clinic Appointments ({appointments.length})
+                  </h3>
+                  <span style={{ fontSize: '12px', fontWeight: 800, textTransform: 'uppercase' }}>
+                    PostgreSQL Persisted
+                  </span>
+                </div>
+
+                {appointments.length === 0 ? (
+                  <div className="brutal-banner banner-info" style={{ textAlign: 'center', padding: '20px' }}>
+                    No appointments booked yet. Click an open slot above or start a voice call with Maya!
+                  </div>
+                ) : (
+                  <div className="table-container">
+                    <table className="brutal-table">
                       <thead>
                         <tr>
                           <th>Patient Name</th>
                           <th>Phone</th>
                           <th>Doctor</th>
-                          <th>Time</th>
+                          <th>Slot Time</th>
+                          <th>Chief Complaint</th>
                           <th>Status</th>
+                          <th>Action</th>
                         </tr>
                       </thead>
                       <tbody>
                         {appointments.map((a) => (
                           <tr key={a.id}>
-                            <td style={{ fontWeight: 800 }}>{a.patient_name}</td>
-                            <td style={{ color: '#1e293b' }}>{a.patient_phone}</td>
+                            <td style={{ fontWeight: 900 }}>{a.patient_name}</td>
+                            <td style={{ fontFamily: 'var(--font-mono)' }}>{a.patient_phone}</td>
                             <td>{a.doctor_name}</td>
                             <td>{a.slot_time}</td>
+                            <td>{a.reason || 'General Checkup'}</td>
                             <td>
-                              <span style={{ background: 'var(--neo-green)', color: 'var(--black)', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 900, border: 'var(--border-thin)', textTransform: 'uppercase' }}>
-                                {a.status}
+                              <span className="badge-specialty" style={{ background: 'var(--accent-green)' }}>
+                                {a.status || 'CONFIRMED'}
                               </span>
+                            </td>
+                            <td>
+                              <button
+                                className="btn btn-sm btn-danger"
+                                onClick={() => handleCancelAppointment(a)}
+                                title="Cancel appointment and restore slot to open"
+                              >
+                                <Trash2 size={12} strokeWidth={3} />
+                                Release
+                              </button>
                             </td>
                           </tr>
                         ))}
@@ -342,54 +630,54 @@ export default function Home() {
           </div>
         </div>
       ) : (
-        /* Tab 2: Eval Harness View */
+        /* TAB 2: EVAL HARNESS (PART B) */
         <div className="card">
-          <div className="section-header">
-            <div>
-              <h2 className="card-title">
-                <ShieldCheck size={24} color="#121212" />
-                Part B: Automated Clinical Evaluation Harness
-              </h2>
-              <p className="card-desc" style={{ marginBottom: 0 }}>
-                Runs deterministic assertions against availability queries, concurrency collision prevention, 108 emergency triage, and patient data validation.
-              </p>
-            </div>
-
+          <div className="card-header-bar">
+            <span className="card-header-title">
+              <ShieldCheck size={20} strokeWidth={3} />
+              Part B: Clinical Agent Automated Evaluation Harness
+            </span>
             <button
-              className="call-btn btn-start"
-              style={{ width: 'auto', padding: '12px 24px' }}
+              className="btn btn-primary-yellow"
               onClick={handleRunEvals}
               disabled={evalLoading}
             >
-              {evalLoading ? 'Running Test Suite...' : '⚡ Run All Evals'}
+              <Activity size={16} strokeWidth={3} />
+              {evalLoading ? 'Executing Test Assertions...' : 'Run All 5 Evals'}
             </button>
           </div>
 
+          <p className="card-desc">
+            Executes programmatic assertions against doctor schedule querying, double-booking race condition prevention, mandatory entity extraction, and the 108 emergency triage protocol.
+          </p>
+
           {evalScore !== null && (
-            <div style={{ margin: '24px 0', padding: '20px', background: 'var(--neo-green)', border: 'var(--border-thick)', borderRadius: '14px', display: 'flex', alignItems: 'center', gap: '20px', boxShadow: 'var(--shadow-md)' }}>
-              <div style={{ fontSize: '42px', fontWeight: 900, color: 'var(--black)', borderRight: 'var(--border-thick)', paddingRight: '20px' }}>{evalScore}%</div>
+            <div className="eval-score-card">
+              <div className="eval-score-digit">{evalScore}%</div>
               <div>
-                <strong style={{ fontSize: '18px', fontWeight: 900, color: 'var(--black)', textTransform: 'uppercase', display: 'block' }}>Evaluation Benchmark Passed</strong>
-                <p style={{ fontSize: '14px', fontWeight: 700, color: 'var(--black)', marginTop: '2px' }}>
-                  All 5 critical safety, concurrency, 108 triage protocol, and booking verification assertions succeeded.
+                <strong style={{ fontSize: '20px', textTransform: 'uppercase', display: 'block' }}>
+                  Safety & Workflow Benchmark Passed
+                </strong>
+                <p style={{ fontSize: '13px', fontWeight: 700, marginTop: '4px' }}>
+                  All critical safety guardrails, concurrency lockouts, 108 emergency triage, and Postgres transactional bookings passed.
                 </p>
               </div>
             </div>
           )}
 
-          <div style={{ marginTop: '20px' }}>
+          <div>
             {evalResults.map((r) => (
-              <div key={r.id} className={`eval-card ${r.passed ? 'eval-pass' : 'eval-fail'}`}>
+              <div key={r.id} className={`eval-row-card ${r.passed ? 'pass' : 'fail'}`}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
-                  <span style={{ fontWeight: 900, fontSize: '16px', color: 'var(--black)' }}>{r.name}</span>
-                  <span className={`eval-badge ${r.passed ? 'eval-badge-pass' : 'eval-badge-fail'}`}>
+                  <span style={{ fontWeight: 900, fontSize: '15px' }}>{r.name}</span>
+                  <span className={`eval-tag ${r.passed ? 'eval-tag-pass' : 'eval-tag-fail'}`}>
                     {r.passed ? '✓ PASSED' : '✕ FAILED'} ({r.durationMs}ms)
                   </span>
                 </div>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: '#475569' }}>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: '#333' }}>
                   <strong>EXPECTED:</strong> {r.expected}
                 </div>
-                <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--black)', marginTop: '4px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 800, marginTop: '4px' }}>
                   <strong>ACTUAL:</strong> {r.actual}
                 </div>
               </div>
@@ -397,6 +685,121 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* Production-Grade Manual Booking Modal */}
+      {isBookingModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsBookingModalOpen(false)}>
+          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">Book Doctor Appointment</h3>
+              <button className="close-btn" onClick={() => setIsBookingModalOpen(false)}>
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmBooking}>
+              <div className="form-group">
+                <label className="form-label">Doctor</label>
+                <select
+                  className="form-select"
+                  value={bookingDoctor}
+                  onChange={(e) => {
+                    setBookingDoctor(e.target.value);
+                    const matching = slots.filter(s => s.doctor_name === e.target.value && !s.is_booked);
+                    if (matching.length > 0) setBookingTime(matching[0].slot_time);
+                  }}
+                >
+                  {Array.from(new Set(slots.map(s => s.doctor_name))).map(d => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Appointment Slot Time</label>
+                <select
+                  className="form-select"
+                  value={bookingTime}
+                  onChange={(e) => setBookingTime(e.target.value)}
+                >
+                  {availableSlotsForSelectedDoctor.length === 0 ? (
+                    <option value="">No open slots available for this doctor</option>
+                  ) : (
+                    availableSlotsForSelectedDoctor.map(s => (
+                      <option key={s.id} value={s.slot_time}>{s.slot_time} (Tomorrow)</option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Patient Full Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. John Doe"
+                  className="form-input"
+                  value={patientName}
+                  onChange={(e) => setPatientName(e.target.value)}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Patient Phone Number *</label>
+                <input
+                  type="tel"
+                  required
+                  placeholder="e.g. +91 98765 43210 or +1-555-0199"
+                  className="form-input"
+                  value={patientPhone}
+                  onChange={(e) => setPatientPhone(e.target.value)}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Reason for Visit / Chief Complaint</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Annual health checkup, chest discomfort follow-up"
+                  className="form-input"
+                  value={bookingReason}
+                  onChange={(e) => setBookingReason(e.target.value)}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary-white"
+                  style={{ flex: 1 }}
+                  onClick={() => setIsBookingModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary-teal"
+                  style={{ flex: 1 }}
+                  disabled={bookingSubmitting || availableSlotsForSelectedDoctor.length === 0}
+                >
+                  {bookingSubmitting ? 'Confirming...' : 'Confirm Booking'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Footer Spec Banner */}
+      <footer className="footer-banner">
+        <span>Metro Health AI • Full-Stack Retell Voice + Supabase Postgres System</span>
+        <span>Built with Neo-Brutalist Design Tokens • 108 Emergency Protocol Active</span>
+      </footer>
     </div>
   );
+}
+
+// Helper for CSS var
+function varCss(name: string) {
+  return `var(${name})`;
 }
