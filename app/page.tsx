@@ -315,17 +315,6 @@ export default function Home() {
 
   return (
     <div className="container">
-      {/* Neo-Brutalist Spec Banner */}
-      <div className="spec-banner">
-        <span>NEO-BRUTALIST DESIGN SYSTEM • BOLD. LOUD. SYSTEMATIC. USABLE.</span>
-        <div className="spec-banner-tags">
-          <span className="spec-chip chip-teal">#00C2CB TEAL</span>
-          <span className="spec-chip chip-magenta">#FF00FF MAGENTA</span>
-          <span className="spec-chip chip-yellow">#FFE000 YELLOW</span>
-          <span className="spec-chip">0-4-12 ELEVATION</span>
-        </div>
-      </div>
-
       {/* Main Header */}
       <header className="header">
         <div className="brand">
